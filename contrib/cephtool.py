@@ -17,7 +17,7 @@ def cephtool_config(config):
             g_cephtool_path = child.values[0]
         elif child.key == "config":
             g_ceph_config = child.values[0]
-    collectd.info("cephtool_config: g_cephtool_path='%s', g_ceph_config='%s'" % \
+    collectd.warning("cephtool_config: g_cephtool_path='%s', g_ceph_config='%s'" % \
             (g_cephtool_path, g_ceph_config))
     if g_cephtool_path == "":
         raise Exception("You must configure the path to cephtool.")
@@ -30,7 +30,7 @@ def cephtool_subprocess(more_args):
     if (g_ceph_config != ""):
         args.extend(["-c", g_ceph_config])
     args.extend(more_args)
-    args.extend(["--format=json", "-o", "-"])
+    args.extend(["--format=json"])
     proc = subprocess.Popen(args, shell=False, stdout=subprocess.PIPE)
     return proc.communicate()[0]
 
@@ -77,8 +77,9 @@ def cephtool_read_pg_states(pg_json):
             else:
                 stateinfo[s] = stateinfo[s] + 1
     for k,v in stateinfo.items():
-        collectd.Values(plugin="cephtool",\
-            type=('num_pgs_' + k),\
+        collectd.Values(plugin="ceph.pg",\
+            type="gauge",\
+            type_instance=('num_pgs_' + k),\
             values=[v]\
         ).dispatch()
 
@@ -92,20 +93,24 @@ def cephtool_read_osd(osd_json):
             num_in = num_in + 1
         if osd["up"] == 1:
             num_up = num_up + 1
-    collectd.Values(plugin="cephtool",\
-        type="num_osds_in",\
+    collectd.Values(plugin="ceph.osd",\
+        type="gauge",\
+        type_instance="num_in",\
         values=[num_in],\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type="num_osds_out",\
+    collectd.Values(plugin="ceph.osd",\
+        type="gauge",\
+        type_instance="num_out",\
         values=[total - num_in],\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type="num_osds_up",\
+    collectd.Values(plugin="ceph.osd",\
+        type="gauge",\
+        type_instance="num_up",\
         values=[num_up],\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type="num_osds_down",\
+    collectd.Values(plugin="ceph.osd",\
+        type="gauge",\
+        type_instance="num_down",\
         values=[total - num_up],\
     ).dispatch()
 
@@ -114,69 +119,84 @@ def cephtool_read(data=None):
     pg_json = cephtool_get_json(["pg", "dump"])
     mon_json = cephtool_get_json(["mon", "dump"])
 
-    collectd.Values(plugin="cephtool",\
-        type='num_osds',\
+    collectd.Values(plugin="ceph.osd",\
+        type='gauge',\
+        type_instance='num_osds',\
         values=[len(osd_json["osds"])]\
     ).dispatch()
     cephtool_read_osd(osd_json["osds"])
 
-    collectd.Values(plugin="cephtool",\
-        type='osd_stats_kb_used',\
+    collectd.Values(plugin="ceph.osd",\
+        type="gauge",\
+        type_instance='kb_used',\
         values=[pg_json["osd_stats_sum"]["kb_used"]]\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type='osd_stats_kb_avail',\
+    collectd.Values(plugin="ceph.osd",\
+        type="gauge",\
+        type_instance='kb_avail',\
         values=[pg_json["osd_stats_sum"]["kb_avail"]]\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type='osd_stats_snap_trim_queue_len',\
+    collectd.Values(plugin="ceph.osd",\
+        type="gauge",\
+        type_instance='snap_trim_queue_len',\
         values=[pg_json["osd_stats_sum"]["snap_trim_queue_len"]]\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type='osd_stats_num_snap_trimming',\
+    collectd.Values(plugin="ceph.osd",\
+        type="gauge",\
+        type_instance='num_snap_trimming',\
         values=[pg_json["osd_stats_sum"]["num_snap_trimming"]]\
     ).dispatch()
 
-    collectd.Values(plugin="cephtool",\
-        type='num_pgs',\
+    collectd.Values(plugin="ceph.pg",\
+        type="gauge",\
+        type_instance='num_pgs',\
         values=[len(pg_json["pg_stats"])]\
     ).dispatch()
 
     cephtool_read_pg_states(pg_json["pg_stats"])
 
-    collectd.Values(plugin="cephtool",\
-        type='num_pools',\
+    collectd.Values(plugin="ceph.pg",\
+        type="gauge",\
+        type_instance='num_pools',\
         values=[len(pg_json["pool_stats"])]\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type='num_objects',\
-        values=[pg_json["pg_stats_sum"]["num_objects"]]\
+    collectd.Values(plugin="ceph.pg",\
+        type="gauge",\
+        type_instance='num_objects',\
+        values=[pg_json["pg_stats_sum"]["stat_sum"]["num_objects"]]\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type='pg_stats_sum_num_bytes',\
-        values=[pg_json["pg_stats_sum"]["num_bytes"]]\
+    collectd.Values(plugin="ceph.pg",\
+        type="gauge",\
+        type_instance='num_bytes',\
+        values=[pg_json["pg_stats_sum"]["stat_sum"]["num_bytes"]]\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type='num_objects_missing_on_primary',\
-        values=[pg_json["pg_stats_sum"]["num_objects_missing_on_primary"]]\
+    collectd.Values(plugin="ceph.pg",\
+        type="gauge",\
+        type_instance='num_objects_missing_on_primary',\
+        values=[pg_json["pg_stats_sum"]["stat_sum"]["num_objects_missing_on_primary"]]\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type='num_objects_degraded',\
-        values=[pg_json["pg_stats_sum"]["num_objects_degraded"]]\
+    collectd.Values(plugin="ceph.pg",\
+        type="gauge",\
+        type_instance='num_objects_degraded',\
+        values=[pg_json["pg_stats_sum"]["stat_sum"]["num_objects_degraded"]]\
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type='num_objects_unfound',\
-        values=[pg_json["pg_stats_sum"]["num_objects_unfound"]]\
+    collectd.Values(plugin="ceph.pg",\
+        type="gauge",\
+        type_instance='num_objects_unfound',\
+        values=[pg_json["pg_stats_sum"]["stat_sum"]["num_objects_unfound"]]\
     ).dispatch()
 
-    collectd.Values(plugin="cephtool",\
-        type='num_monitors',\
+    collectd.Values(plugin="ceph.mon",\
+        type="gauge",\
+        type_instance='num_mons',\
         values=[len(mon_json["mons"])],
     ).dispatch()
-    collectd.Values(plugin="cephtool",\
-        type='num_monitors_in_quorum',\
+    collectd.Values(plugin="ceph.mon",\
+        type="gauge",\
+        type_instance='num_mons_in_quorum',\
         values=[len(mon_json["quorum"])],
     ).dispatch()
 
 collectd.register_config(cephtool_config)
+collectd.warning("Initializing cephtool plugin")
 collectd.register_read(cephtool_read)
